@@ -48,8 +48,11 @@ def resolver_ruta_local(ruta_github):
     # Regla 1: El menú va a apps/Menu_NUEVO.exe
     if nombre_archivo == "Menu.exe":
         return os.path.join(BASE_DIR, "Menu_NUEVO.exe")
+    # --- NUEVA REGLA 2: El actualizador se guarda como temporal ---
+    if nombre_archivo.lower() == "actualizador.exe":
+        return os.path.join(BASE_DIR, "actualizador_NUEVO.exe")
     
-    # Regla 2: TODO LO DEMÁS cae directamente dentro de tu carpeta local 'apps'
+    # Regla 3: Todo LO DEMÁS cae directamente dentro de tu carpeta local 'apps'
     return os.path.join(BASE_DIR, nombre_archivo)
 
 # -------------------------------------------------------------------------
@@ -75,16 +78,21 @@ def cargar_configuracion():
         print(Fore.RED + f"[❌] Error al cargar la configuración: {e}")
         sys.exit(1)
 
-def guardar_ultimo_commit(nuevo_commit, actualizar_menu_estado=False):
+# --- MODIFICACIÓN 1: Añadir el parámetro a la función ---
+def guardar_ultimo_commit(nuevo_commit, actualizar_menu_estado=False, actualizar_actualizador_estado=False):
     try:
         datos = cargar_configuracion()
         if "Ultimo_Commit" not in datos or not isinstance(datos["Ultimo_Commit"], dict):
             datos["Ultimo_Commit"] = {}
         datos["Ultimo_Commit"]["commit"] = nuevo_commit
         
-        # Si se descargó un nuevo menú, ponemos el estado en 1
+        # Si se descargó un nuevo menú
         if actualizar_menu_estado:
             datos["Estado_Menu"] = 1
+            
+        # Si se descargó un nuevo actualizador
+        if actualizar_actualizador_estado:
+            datos["Estado_Actualizador"] = 1
         
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(datos, f, indent=4, ensure_ascii=False)
@@ -132,7 +140,7 @@ def actualizar_solo_cambios():
         hay_nuevo_commit = (sha_remoto != sha_local)
         
         if hay_nuevo_commit:
-            print(f"Nueva versión detectada en GitHub: {sha_remoto[:7]}")
+            print(f"Nueva versión detectada: {sha_remoto[:7]}")
             url_cambios = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/compare/{sha_local}...{sha_remoto}" if sha_local else f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/commits/{sha_remoto}"
 
             res_cambios = requests.get(url_cambios, headers=headers, timeout=5)
@@ -154,28 +162,42 @@ def actualizar_solo_cambios():
         descargas_totales = set(archivos_faltantes + archivos_actualizados)
 
         if not descargas_totales and not archivos_eliminados:
-            print("Todos los archivos están presentes y en la última versión.")
+            print("[UI] DONE") # Le avisa a la interfaz que no hay nada que hacer
             if hay_nuevo_commit: 
                 guardar_ultimo_commit(sha_remoto)
             return
 
+        # --- CÁLCULO DE PROGRESO REAL ---
+        total_tareas = len(archivos_eliminados) + len(descargas_totales)
+        print(f"[UI] TAREAS:{total_tareas}", flush=True)
+        tarea_actual = 0
+
         # EJECUTAR ELIMINACIONES
         for nombre_archivo in archivos_eliminados:
+            tarea_actual += 1
+            print(f"[UI] PROGRESO:{tarea_actual}|Eliminando {nombre_archivo}...", flush=True)
             ruta_local_archivo = resolver_ruta_local(nombre_archivo)
             if os.path.exists(ruta_local_archivo):
-                print(f"Eliminando: {ruta_local_archivo}...")
                 os.remove(ruta_local_archivo)
 
         # EJECUTAR DESCARGAS
         hubo_cambio_en_menu = False
+        hubo_cambio_en_actualizador = False # NUEVA VARIABLE
+        
         for nombre_archivo in descargas_totales:
-            if os.path.basename(nombre_archivo).lower() == "menu.exe":
+            tarea_actual += 1
+            print(f"[UI] PROGRESO:{tarea_actual}|Descargando {nombre_archivo}...", flush=True)
+            
+            # Detectamos qué se está descargando
+            nombre_base = os.path.basename(nombre_archivo).lower()
+            if nombre_base == "menu.exe":
                 hubo_cambio_en_menu = True
+            elif nombre_base == "actualizador.exe":
+                hubo_cambio_en_actualizador = True
                 
             ruta_local_archivo = resolver_ruta_local(nombre_archivo)
             url_raw = f"https://raw.githubusercontent.com/{REPO_OWNER}/{REPO_NAME}/{sha_remoto}/{nombre_archivo}"
             
-            print(f"Descargando: {nombre_archivo}...")
             os.makedirs(os.path.dirname(ruta_local_archivo), exist_ok=True)
             
             res_file = requests.get(url_raw)
@@ -183,11 +205,16 @@ def actualizar_solo_cambios():
                 with open(ruta_local_archivo, "wb") as f:
                     f.write(res_file.content)
             else:
-                print(f"[!] Error al descargar {nombre_archivo}")
+                print(f"Error al descargar {nombre_archivo}")
         
-        guardar_ultimo_commit(sha_remoto, actualizar_menu_estado=hubo_cambio_en_menu)
-        print("¡Sincronización e integridad completadas con éxito!")
-
+        # Al final, guardamos con ambas banderas
+        guardar_ultimo_commit(
+            sha_remoto, 
+            actualizar_menu_estado=hubo_cambio_en_menu, 
+            actualizar_actualizador_estado=hubo_cambio_en_actualizador
+        )
+        print("[UI] DONE", flush=True)
+        
     except Exception as e:
         print(f"Error crítico en actualización: {e}")
 
