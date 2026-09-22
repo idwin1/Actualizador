@@ -33,4 +33,4 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.TOKEN_EJECUTABLES }}
       run: |
-        gh release upload produccion dist/actualizador.exe --repo idwin1/Ejecutables --clobber
+        gh release upload Produccion dist/actualizador.exe --repo idwin1/Ejecutables --clobber
