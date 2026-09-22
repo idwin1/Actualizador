@@ -1,0 +1,36 @@
+name: Compilar y Subir Actualizador.exe
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+    - name: Clonar el código local
+      uses: actions/checkout@v4
+
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar librerías y PyInstaller
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+
+    - name: Compilar a .exe
+      run: |
+        # ATENCIÓN: No usamos --windowed. La consola es necesaria para comunicarse con el Menú.
+        # Asegúrate de que tu archivo de Python se llame exactamente 'Actualizador.py'
+        pyinstaller --noconfirm --onefile --name "Actualizador" Actualizador.py
+
+    - name: Subir archivo a Ejecutables
+      env:
+        GH_TOKEN: ${{ secrets.TOKEN_EJECUTABLES }}
+      run: |
+        gh release upload produccion dist/actualizador.exe --repo idwin1/Ejecutables --clobber
