@@ -145,11 +145,19 @@ def actualizar_desde_releases():
         for asset in assets:
             nombre = asset["name"]
             fecha_nube = asset.get("updated_at", "")
-            ruta_local = resolver_ruta_local(nombre)
             fecha_local = fechas_locales.get(nombre, "")
             
-            # Descargar si: No existe el archivo físicamente, o la fecha en la nube es más nueva
-            if not os.path.exists(ruta_local) or fecha_nube > fecha_local:
+            # --- SOLUCIÓN AL BUCLE: Revisar la ruta FINAL, no la temporal ---
+            if nombre.lower() == "menu.exe":
+                # El menú real vive un nivel arriba de la carpeta 'apps'
+                ruta_final = os.path.join(os.path.dirname(BASE_DIR), "Menu.exe")
+            elif nombre.lower() == "actualizador.exe":
+                ruta_final = os.path.join(BASE_DIR, "actualizador.exe")
+            else:
+                ruta_final = os.path.join(BASE_DIR, nombre)
+            
+            # Descargar solo si: No existe en su ubicación final, o hay una versión más nueva en GitHub
+            if not os.path.exists(ruta_final) or fecha_nube > fecha_local:
                 descargas_necesarias.append(asset)
                 
         # Si no hay nada que descargar, salimos limpiamente
